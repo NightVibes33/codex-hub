@@ -1,0 +1,154 @@
+name: Build Unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-ipa:
+    name: Build Unsigned IPA on macOS 26
+    runs-on: macos-26
+
+    env:
+      APP_NAME: CodexHub
+      SCHEME: CodexHub
+      CONFIGURATION: Release
+      SDK: iphoneos
+      XCODE_APP: /Applications/Xcode_26.6.app
+      PROJECT_PATH: CodexHub.xcodeproj
+      WORKSPACE_PATH: ""
+      DERIVED_DATA_PATH: build/DerivedData
+      ARCHIVE_PATH: build/CodexHub.xcarchive
+      STAGING_PATH: build/unsigned-ipa-staging
+      IPA_PATH: build/CodexHub-unsigned.ipa
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Print runner and toolchain info
+        run: |
+          set -euo pipefail
+          echo "macOS:"
+          sw_vers
+          echo ""
+          echo "Available Xcode apps:"
+          ls -1 /Applications | grep -E '^Xcode' || true
+          echo ""
+          echo "Current xcode-select:"
+          xcode-select -p || true
+          echo ""
+          echo "Current xcodebuild:"
+          xcodebuild -version || true
+
+      - name: Select pinned Xcode
+        run: |
+          set -euo pipefail
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "Pinned Xcode not found: $XCODE_APP"
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Validate project/workspace inputs
+        run: |
+          set -euo pipefail
+          if [ -n "$WORKSPACE_PATH" ]; then
+            [ -d "$WORKSPACE_PATH" ] || exit 1
+          else
+            [ -d "$PROJECT_PATH" ] || exit 1
+          fi
+
+      - name: Validate scheme is visible to xcodebuild
+        run: |
+          set -euo pipefail
+          if [ -n "$WORKSPACE_PATH" ]; then
+            xcodebuild -list -workspace "$WORKSPACE_PATH" > build-schemes.txt
+          else
+            xcodebuild -list -project "$PROJECT_PATH" > build-schemes.txt
+          fi
+          cat build-schemes.txt
+          grep -F "$SCHEME" build-schemes.txt >/dev/null
+
+      - name: Clean build folder
+        run: |
+          set -euo pipefail
+          rm -rf build
+          mkdir -p build
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          set -euo pipefail
+          if [ -n "$WORKSPACE_PATH" ]; then
+            xcodebuild -resolvePackageDependencies -workspace "$WORKSPACE_PATH" -scheme "$SCHEME"
+          else
+            xcodebuild -resolvePackageDependencies -project "$PROJECT_PATH" -scheme "$SCHEME"
+          fi
+
+      - name: Archive unsigned iOS app
+        run: |
+          set -euo pipefail
+          COMMON_ARGS=(
+            -scheme "$SCHEME"
+            -configuration "$CONFIGURATION"
+            -sdk "$SDK"
+            -destination "generic/platform=iOS"
+            -archivePath "$ARCHIVE_PATH"
+            -derivedDataPath "$DERIVED_DATA_PATH"
+            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGN_IDENTITY=
+            CODE_SIGN_STYLE=Manual
+            DEVELOPMENT_TEAM=
+            PROVISIONING_PROFILE_SPECIFIER=
+            AD_HOC_CODE_SIGNING_ALLOWED=NO
+          )
+          if [ -n "$WORKSPACE_PATH" ]; then
+            xcodebuild archive -workspace "$WORKSPACE_PATH" "${COMMON_ARGS[@]}"
+          else
+            xcodebuild archive -project "$PROJECT_PATH" "${COMMON_ARGS[@]}"
+          fi
+
+      - name: Locate archived app
+        run: |
+          set -euo pipefail
+          APPLICATIONS_DIR="$ARCHIVE_PATH/Products/Applications"
+          [ -d "$APPLICATIONS_DIR" ] || exit 1
+          APP_PATH=$(find "$APPLICATIONS_DIR" -maxdepth 1 -type d -name "*.app" | head -n 1)
+          [ -n "$APP_PATH" ] || exit 1
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Create unsigned IPA
+        run: |
+          set -euo pipefail
+          rm -rf "$STAGING_PATH"
+          mkdir -p "$STAGING_PATH/Payload"
+          cp -R "$APP_PATH" "$STAGING_PATH/Payload/"
+          rm -f "$IPA_PATH"
+          cd "$STAGING_PATH"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload "../$(basename "$IPA_PATH")"
+          cd ../..
+          [ -f "$IPA_PATH" ] || exit 1
+
+      - name: Verify IPA structure
+        run: |
+          set -euo pipefail
+          unzip -l "$IPA_PATH" | grep -F "Payload/" >/dev/null
+          unzip -l "$IPA_PATH" | grep -F ".app/" >/dev/null
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexHub-unsigned-ipa
+          path: build/CodexHub-unsigned.ipa
+          retention-days: 14
