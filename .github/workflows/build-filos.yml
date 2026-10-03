@@ -1,0 +1,58 @@
+name: Build Filos App Store Port
+
+on:
+  push:
+    branches:
+      - filos-appstore-temp-7f3c9a
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer || true
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild             -project FilosStore.xcodeproj             -scheme FilosStore             -resolvePackageDependencies
+
+      - name: Build unsigned iOS app
+        run: |
+          set -o pipefail
+          xcodebuild             -project FilosStore.xcodeproj             -scheme FilosStore             -configuration Release             -destination 'generic/platform=iOS'             -derivedDataPath build/DerivedData             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             build | tee build.log
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/DerivedData/Build/Products/Release-iphoneos/Filos.app Payload/Filos.app
+          ditto -c -k --sequesterRsrc --keepParent Payload Filos-AppStoreSafe-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Filos-AppStoreSafe-unsigned
+          path: Filos-AppStoreSafe-unsigned.ipa
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Filos-build-log
+          path: build.log
+          if-no-files-found: ignore
