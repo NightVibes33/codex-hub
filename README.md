@@ -27,3 +27,5 @@ Temporary public development branch for an App-Store-safe iPhone/iPad file manag
 Bundle identifier: `com.nightvibes33.filos`
 
 The implementation on this branch is clean-room because the referenced upstream repository currently does not publish a software license.
+
+CI builds on every push to this branch and publishes an unsigned IPA artifact for validation.
