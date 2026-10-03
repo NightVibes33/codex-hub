@@ -1,5 +1,29 @@
-# Filos App Store Port
+# Filos — App Store Safe Port
 
-Temporary clean branch for an App-Store-safe port of the Filos iOS file manager.
+Temporary public development branch for an App-Store-safe iPhone/iPad file manager matching the Filos workflow and UI.
 
-Source snapshot: `jailbreakdotparty/Filos@012d05cbcb666103bee8417ccb173e24b8280a8c`
+## Scope
+
+- Native SwiftUI file browser
+- Documents, app container, temporary storage, and user-selected folders
+- Security-scoped folder bookmarks for Files/iCloud/external-drive access
+- File/folder creation, rename, duplicate, move, delete, import, share
+- ZIP compression and extraction
+- Quick Look
+- Text editor
+- Property-list editor
+- Favorites
+- File metadata / POSIX permission viewer
+- Search and sorting
+- Logs and settings
+- Privacy manifest for required-reason APIs
+- No private entitlements
+- No sandbox-extension token consumption
+- No private system symbols
+- No root filesystem browsing
+- No other-app container browsing
+- No forced process termination
+
+Bundle identifier: `com.nightvibes33.filos`
+
+The implementation on this branch is clean-room because the referenced upstream repository currently does not publish a software license.
