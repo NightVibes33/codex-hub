@@ -86,7 +86,7 @@ struct FileEntry: Identifiable, Hashable {
         }
 
         id = normalized.path
-        url = normalized
+        self.url = normalized
         destinationURL = destination
         name = normalized.lastPathComponent.isEmpty ? "/" : normalized.lastPathComponent
         kind = isLink ? .symlink : (isDirectory ? .folder : .file)
